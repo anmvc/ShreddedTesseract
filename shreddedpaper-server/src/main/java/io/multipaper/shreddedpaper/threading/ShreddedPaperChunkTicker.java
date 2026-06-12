@@ -1,6 +1,7 @@
 package io.multipaper.shreddedpaper.threading;
 
 import ca.spottedleaf.moonrise.common.util.WorldUtil;
+import ca.spottedleaf.moonrise.common.util.TickThread;
 import com.google.common.collect.Lists;
 import com.mojang.logging.LogUtils;
 import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
@@ -48,9 +49,9 @@ public class ShreddedPaperChunkTicker {
 
         CompletableFuture<Void> future = CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
 
-        if (ShreddedPaperConfiguration.get().optimizations.processTrackQueueInParallel) future = future.thenCompose(v -> this.processTrackQueueInParallel(level));
+        if (ShreddedPaperConfiguration.get().optimizations.processTrackQueueInParallel) future = future.thenCompose(_ -> this.processTrackQueueInParallel(level));
 
-        if (ShreddedPaperConfiguration.get().optimizations.flushQueueInParallel) future = future.thenCompose(v -> this.flushQueueInParallel(level));
+        if (ShreddedPaperConfiguration.get().optimizations.flushQueueInParallel) future = future.thenCompose(_ -> this.flushQueueInParallel(level));
 
         return future;
     }
@@ -73,10 +74,10 @@ public class ShreddedPaperChunkTicker {
                 futures.add(CompletableFuture.runAsync(() -> trackedEntities.forEach(ShreddedPaperEntityTicker::processTrackQueue), ShreddedPaperTickThread.getExecutor()));
             }
 
-            allFuture = allFuture.thenCompose(v -> CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)));
+            allFuture = allFuture.thenCompose(_ -> CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)));
             return allFuture;
         } finally {
-            allFuture.whenComplete((v, e) -> level.chunkScheduler.getRegionLocker().globalLock().tryUnlockWrite());
+            allFuture.whenComplete((_, _) -> level.chunkScheduler.getRegionLocker().globalLock().tryUnlockWrite());
         }
     }
 
@@ -115,13 +116,18 @@ public class ShreddedPaperChunkTicker {
 
             ShreddedPaperChangesBroadcaster.setAsWorkerThread();
 
+            //noinspection StatementWithEmptyBody
             while (region.getInternalTaskQueue().executeTask()) ;
 
             level.moonrise$getChunkTaskScheduler().chunkHolderManager.processUnloads(region);
 
             region.forEachTickingEntity(entity -> {
+                if (!TickThread.isTickThreadFor(entity) || !TickThread.isTickThreadFor(level, entity.blockPosition())) {
+                    return;
+                }
+
                 CraftEntity bukkitEntity = entity.getBukkitEntityRaw();
-                if (bukkitEntity != null && !entity.isRemoved()) { // Entity could have been removed by another entity's task
+                if (bukkitEntity != null && !entity.isRemoved()) {
                     bukkitEntity.taskScheduler.executeTick();
                 }
             });
@@ -141,15 +147,26 @@ public class ShreddedPaperChunkTicker {
                 level.handlingTickThreadLocal.set(false);
             }
 
-            region.forEachTickingEntity(ShreddedPaperEntityTicker::tickEntity);
+            region.forEachTickingEntity(entity -> {
+                if (!TickThread.isTickThreadFor(entity) || !TickThread.isTickThreadFor(level, entity.blockPosition())) {
+                    return;
+                }
+                ShreddedPaperEntityTicker.tickEntity(entity);
+            });
 
             if (!ShreddedPaperConfiguration.get().optimizations.processTrackQueueInParallel) region.forEachTrackedEntity(ShreddedPaperEntityTicker::processTrackQueue);
 
             level.tickBlockEntities(region.tickingBlockEntities, region.pendingBlockEntityTickers);
 
-            region.getPlayers().forEach(ShreddedPaperPlayerTicker::tickPlayer);
+            region.getPlayers().forEach(player -> {
+                if (!TickThread.isTickThreadFor(player) || !TickThread.isTickThreadFor(level, player.blockPosition())) {
+                    return;
+                }
+                ShreddedPaperPlayerTicker.tickPlayer(player);
+            });
 
-            while (region.getInternalTaskQueue().executeTask()) ;
+	        //noinspection StatementWithEmptyBody
+	        while (region.getInternalTaskQueue().executeTask()) ;
 
             ShreddedPaperChangesBroadcaster.broadcastChanges();
 

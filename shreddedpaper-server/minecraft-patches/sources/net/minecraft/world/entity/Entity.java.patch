@@ -55,10 +55,10 @@
      public void setPos(final double x, final double y, final double z) {
 +        // ShreddedPaper start
 +        Vec3 vec3 = new Vec3(x, y, z);
-+        if (!this.firstTick && !this.blockPosition().equals(BlockPos.containing(vec3)) && (!TickThread.isTickThreadFor(level, vec3) || !TickThread.isTickThreadFor(this))) {
-+            LOGGER.error("Trying to async move {} to {} {} {}", this, x, y, z);
-+            TickThread.ensureTickThread(this, "Cannot async move entity");
-+            TickThread.ensureTickThread(level, BlockPos.containing(vec3), "Cannot move entity to async destination");
++        if (!this.firstTick && this.level() instanceof ServerLevel serverLevel && !this.blockPosition().equals(BlockPos.containing(vec3)) && (!TickThread.isTickThreadFor(serverLevel, vec3) || !TickThread.isTickThreadFor(this))) {
++            final BlockPos targetPos = BlockPos.containing(vec3);
++            ShreddedPaper.ensureSync(this, serverLevel, ChunkPos.containing(targetPos), () -> this.setPos(x, y, z));
++            return;
 +        }
 +        // ShreddedPaper end
          this.setPosRaw(x, y, z, true); // Paper - Block invalid positions and bounding box; force update
@@ -122,15 +122,16 @@
  
                      profiler.pop();
                  } else if (this.portalProcess.hasExpired()) {
-@@ -4080,6 +_,11 @@
+@@ -4080,6 +_,12 @@
              PositionMoveRotation absolutePosition = PositionMoveRotation.calculateAbsolute(PositionMoveRotation.of(this), PositionMoveRotation.of(transition), transition.relatives());
              Vec3 velocity = absolutePosition.deltaMovement(); // Paper
              org.bukkit.Location to = org.bukkit.craftbukkit.util.CraftLocation.toBukkit(absolutePosition.position(), transition.newLevel(), absolutePosition.yRot(), absolutePosition.xRot());
-+            if (!TickThread.isTickThreadFor(this) || !TickThread.isTickThreadFor(transition.newLevel(), absolutePosition.position())) { // ShreddedPaper
-+                LOGGER.error("Trying to teleport {} to {}", this, to); // ShreddedPaper
-+                TickThread.ensureTickThread(this, "Cannot teleport entity async"); // ShreddedPaper
-+                TickThread.ensureTickThread(transition.newLevel(), CraftLocation.toBlockPos(to), "Cannot teleport entity to async destination"); // ShreddedPaper
-+            } // ShreddedPaper
++            if (!TickThread.isTickThreadFor(this) || !TickThread.isTickThreadFor(transition.newLevel(), absolutePosition.position())) {
++                final BlockPos targetPos = CraftLocation.toBlockPos(to);
++                final TeleportTransition transitionCopy = transition;
++                ShreddedPaper.ensureSync(this, transition.newLevel(), ChunkPos.containing(targetPos), () -> this.teleport(transitionCopy));
++                return null;
++            }
              // Paper start - gateway-specific teleport event
              final org.bukkit.event.entity.EntityTeleportEvent teleEvent;
              if (this.portalProcess != null && this.portalProcess.isSamePortal(((net.minecraft.world.level.block.EndGatewayBlock) Blocks.END_GATEWAY)) && this.level.getBlockEntity(this.portalProcess.getEntryPosition()) instanceof net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity theEndGatewayBlockEntity) {
@@ -150,3 +151,19 @@
              synchronized (this.posLock) { // Paper - detailed watchdog information
              this.deltaMovement = deltaMovement;
              } // Paper - detailed watchdog information
+@@ -5012,6 +_,15 @@
+     }
+ 
+     public final void setPosRaw(double x, double y, double z, boolean forceBoundingBoxUpdate) {
++        // ShreddedPaper start
++        if (!this.firstTick && this.level() instanceof ServerLevel serverLevel) {
++            final BlockPos targetPos = BlockPos.containing(x, y, z);
++            if (!this.blockPosition().equals(targetPos) && (!TickThread.isTickThreadFor(this) || !TickThread.isTickThreadFor(serverLevel, targetPos))) {
++                ShreddedPaper.ensureSync(this, serverLevel, ChunkPos.containing(targetPos), () -> this.setPosRaw(x, y, z, forceBoundingBoxUpdate));
++                return;
++            }
++        }
++        // ShreddedPaper end
+         // Paper start - rewrite chunk system
+         if (this.updatingSectionStatus) {
+             LOGGER.error(

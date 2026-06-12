@@ -15,6 +15,22 @@
  import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
  import it.unimi.dsi.fastutil.ints.Int2ObjectMap.Entry;
  import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
+@@ -207,7 +_,6 @@
+ import net.minecraft.world.level.block.entity.StructureBlockEntity;
+ import net.minecraft.world.level.block.entity.TestBlockEntity;
+ import net.minecraft.world.level.block.entity.TestInstanceBlockEntity;
+-import net.minecraft.world.level.block.state.BlockBehaviour;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.gamerules.GameRule;
+ import net.minecraft.world.level.gamerules.GameRules;
+@@ -244,7 +_,6 @@
+ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+ import org.bukkit.event.player.PlayerInputEvent;
+ import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+-import org.bukkit.event.player.PlayerInteractEntityEvent;
+ import org.bukkit.event.player.PlayerItemHeldEvent;
+ import org.bukkit.event.player.PlayerMoveEvent;
+ import org.bukkit.event.player.PlayerRespawnEvent.RespawnReason;
 @@ -376,7 +_,7 @@
          }
  
@@ -59,6 +75,39 @@
  
                                      if (this.shouldCheckPlayerMovement(isFallFlying)) {
                                          float metersPerTick = isFallFlying ? 300.0F : 100.0F;
+@@ -2007,12 +_,32 @@
+             return;
+         }
+         // Paper end - Prevent teleporting dead entities
++
++        // ShreddedPaper start - handle cross-region teleport
++        Vec3 pos = destination.position();
++        BlockPos targetBlock = BlockPos.containing(pos);
++        if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(this.player)
++                || !ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(this.player.level(), pos)) {
++            final PositionMoveRotation destCopy = destination;
++            final Set<Relative> relativesCopy = relatives;
++            io.multipaper.shreddedpaper.ShreddedPaper.ensureSync(
++                this.player,
++                (net.minecraft.server.level.ServerLevel) this.player.level(),
++                net.minecraft.world.level.ChunkPos.containing(targetBlock),
++                () -> this.internalTeleport(destCopy, relativesCopy)
++            );
++            return;
++        }
++        // ShreddedPaper end - handle cross-region teleport
++
++        // Paper start - Prevent teleporting dead entities
+         if (Float.isNaN(destination.yRot())) {
+             destination = new PositionMoveRotation(destination.position(), destination.deltaMovement(), 0, destination.xRot());
+         }
+         if (Float.isNaN(destination.xRot())) {
+             destination = new PositionMoveRotation(destination.position(), destination.deltaMovement(), destination.yRot(), 0);
+         }
++        // Paper end - Prevent teleporting dead entities
+ 
+         this.justTeleported = true;
+         // CraftBukkit end
 @@ -2352,7 +_,9 @@
              for (ServerLevel level : this.server.getAllLevels()) {
                  Entity entity = packet.getEntity(level);
