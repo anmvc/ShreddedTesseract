@@ -12,7 +12,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -44,7 +43,7 @@ public class SynchronousPluginExecution {
 
     public static void execute(Plugin plugin, RunnableWithException runnable) throws Exception {
         ShreddedPaperConfiguration config = ShreddedPaperConfiguration.get();
-        if (plugin == null || config == null || !config.multithreading.runUnsupportedPluginsInSync || plugin.getDescription().isFoliaSupported() || TickThread.isShutdownThread()) {
+        if (plugin == null || config == null || !config.multithreading.runUnsupportedPluginsInSync || plugin.getPluginMeta().isFoliaSupported() || TickThread.isShutdownThread()) {
             // Multi-thread safe plugin, run it straight away
             runnable.run();
             return;
@@ -140,8 +139,7 @@ public class SynchronousPluginExecution {
     }
 
     private static boolean fillPluginsToLock(Plugin plugin, TreeSet<String> pluginsToLock, List<String> parentList) {
-        if (plugin.getDescription().isFoliaSupported()) {
-            // Multi-thread safe plugin, we don't need to lock it
+        if (plugin.getPluginMeta().isFoliaSupported()) {
             return false;
         }
 
@@ -162,7 +160,7 @@ public class SynchronousPluginExecution {
 
         boolean hasDependency = false;
 
-        for (String depend : plugin.getDescription().getDepend()) {
+        for (String depend : plugin.getPluginMeta().getPluginDependencies()) {
             Plugin dependPlugin = plugin.getServer().getPluginManager().getPlugin(depend);
             if (dependPlugin != null) {
                 hasDependency |= fillPluginsToLock(dependPlugin, pluginsToLock, parentList);
@@ -171,7 +169,7 @@ public class SynchronousPluginExecution {
             }
         }
 
-        for (String softDepend : plugin.getDescription().getSoftDepend()) {
+        for (String softDepend : plugin.getPluginMeta().getPluginSoftDependencies()) {
             Plugin softDependPlugin = plugin.getServer().getPluginManager().getPlugin(softDepend);
             if (softDependPlugin != null) {
                 hasDependency |= fillPluginsToLock(softDependPlugin, pluginsToLock, parentList);

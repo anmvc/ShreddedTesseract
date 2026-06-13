@@ -1,0 +1,25 @@
+--- a/src/main/java/io/papermc/paper/plugin/provider/configuration/PaperPluginMeta.java
++++ b/src/main/java/io/papermc/paper/plugin/provider/configuration/PaperPluginMeta.java
+@@ -65,6 +_,8 @@
+     @Required
+     private ApiVersion apiVersion;
+ 
++    private boolean foliaSupported = false; // ShreddedPaper - Folia compatibility check
++
+     private Map<PluginDependencyLifeCycle, Map<String, DependencyConfiguration>> dependencies = new EnumMap<>(PluginDependencyLifeCycle.class);
+ 
+     public PaperPluginMeta() {
+@@ -255,6 +_,13 @@
+     public @NotNull List<String> getProvidedPlugins() {
+         return this.provides;
+     }
++
++    // ShreddedPaper start - Folia compatibility check
++    @Override
++    public boolean isFoliaSupported() {
++        return this.foliaSupported;
++    }
++    // ShreddedPaper end - Folia compatibility check
+ 
+     public String getBootstrapper() {
+         return this.bootstrapper;

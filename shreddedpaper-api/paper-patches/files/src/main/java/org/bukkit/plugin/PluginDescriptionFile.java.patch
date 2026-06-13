@@ -8,11 +8,12 @@
      // Paper start - plugin loader api
      private String paperPluginLoader;
      @org.jetbrains.annotations.ApiStatus.Internal @org.jetbrains.annotations.Nullable
-@@ -1057,6 +_,11 @@
+@@ -1057,6 +_,12 @@
          return libraries;
      }
  
 +    // ShreddedPaper start
++    @Override
 +    public boolean isFoliaSupported() {
 +        return "true".equalsIgnoreCase(foliaSupported);
 +    }
